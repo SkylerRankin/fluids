@@ -49,16 +49,46 @@ target_include_directories(imgui PUBLIC ${imgui_external_SOURCE_DIR})
 
 # List source files
 set(CXX_SOURCES
-    src/fluids.cpp
+    src/camera.cpp
+    src/engine.cpp
+    src/main.cpp
+    src/shader.cpp
+    src/renderer/renderer2d.cpp
+    src/sim/sim2dCPU.cpp
     ${GLAD_SOURCES}
 )
 
 # List header files
-set(CXX_HEADERS)
+set(CXX_HEADERS
+    src/camera.h
+    src/engine.h
+    src/glCommon.h
+    src/shader.h
+    src/stb_image.h
+    src/renderer/renderer2d.h
+    src/sim/sim2dCPU.h)
 set_source_files_properties(${CXX_HEADERS} PROPERTIES HEADER_FILE_ONLY true)
+
+# List shader files
+set(SHADER_SOURCES
+    src/shaders/noop_fragment.glsl
+    src/shaders/noop_vertex.glsl)
+set_source_files_properties(${SHADER_SOURCES} PROPERTIES HEADER_FILE_ONLY true)
+
+# Copy resources files into build directory
+set(PROJECT_BINARY_SUBDIR "")
+if (MSVC)
+    set(PROJECT_BINARY_SUBDIR /$<$<CONFIG:Debug>:Debug>$<$<CONFIG:Release>:Release>)
+endif()
+add_custom_target(copy_shaders ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${PROJECT_SOURCE_DIR}/src/shaders
+    ${PROJECT_BINARY_DIR}${PROJECT_BINARY_SUBDIR}/shaders
+    COMMENT "Copying shaders into build directory")
 
 # Create executable and link used libraries.
 add_executable(${TARGET} ${CXX_SOURCES} ${CXX_HEADERS} ${GLAD_SOURCES})
+add_dependencies(${TARGET} copy_shaders)
 target_link_libraries(imgui PRIVATE glfw)
 target_link_libraries(fluids PRIVATE glfw glm imgui)
 
