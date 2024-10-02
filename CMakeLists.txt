@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
 set(TARGET fluids)
+set(TEST_TARGET test)
 project(${TARGET} VERSION 0.1)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
+
+# set(RUN_UNIT_TESTS false)
+# if (unittest)
+#     set(RUN_UNIT_TESTS true)
+#     message("Building unit test executable")
+# endif()
 
 # Prevents the ZERO_CHECK project from being generated
 set(CMAKE_SUPPRESS_REGENERATION true)
@@ -57,6 +64,10 @@ set(CXX_SOURCES
     src/sim/sim2dCPU.cpp
     ${GLAD_SOURCES}
 )
+set(CXX_TEST_SOURCES
+    ${CXX_SOURCES}
+    test/sim/test_sim2dCPU.cpp)
+list(REMOVE_ITEM CXX_TEST_SOURCES src/main.cpp)
 
 # List header files
 set(CXX_HEADERS
@@ -66,8 +77,13 @@ set(CXX_HEADERS
     src/shader.h
     src/stb_image.h
     src/renderer/renderer2d.h
-    src/sim/sim2dCPU.h)
+    src/sim/sim2dCPU.h
+    lib/eigen)
+set(CXX_TEST_HEADERS
+    ${CXX_HEADERS}
+    test/acutest.h)
 set_source_files_properties(${CXX_HEADERS} PROPERTIES HEADER_FILE_ONLY true)
+set_source_files_properties(${CXX_TEST_HEADERS} PROPERTIES HEADER_FILE_ONLY true)
 
 # List shader files
 set(SHADER_SOURCES
@@ -90,12 +106,18 @@ add_custom_target(copy_shaders ALL
 add_executable(${TARGET} ${CXX_SOURCES} ${CXX_HEADERS} ${GLAD_SOURCES})
 add_dependencies(${TARGET} copy_shaders)
 target_link_libraries(imgui PRIVATE glfw)
-target_link_libraries(fluids PRIVATE glfw glm imgui)
+target_link_libraries(${TARGET} PRIVATE glfw glm imgui)
+target_include_directories(${TARGET} PRIVATE lib/eigen/)
+
+# Create test executable and link used libraries.
+add_executable(${TEST_TARGET} ${CXX_TEST_SOURCES} ${CXX_TEST_HEADERS} ${GLAD_SOURCES})
+add_dependencies(${TEST_TARGET} copy_shaders)
+target_link_libraries(imgui PRIVATE glfw)
+target_link_libraries(${TEST_TARGET} PRIVATE glfw glm imgui)
+target_include_directories(${TEST_TARGET} PRIVATE lib/eigen/)
 
 # Controls if a command prompt window is opened when running the executable on Windows. Set to true to hide the window.
 set(HIDE_COMMAND_WINDOW false)
 if (${WIN32} AND ${HIDE_COMMAND_WINDOW})
     set_target_properties(${TARGET} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup /SUBSYSTEM:WINDOWS")
 endif()
-
-

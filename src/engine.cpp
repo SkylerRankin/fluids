@@ -3,12 +3,13 @@
 #include "engine.h"
 #include "glCommon.h"
 
-Engine::Engine(GLFWwindow* window) : window(window) {
+
+Engine::Engine(GLFWwindow* window, const std::string& executableDirectory) : window(window), executableDirectory(executableDirectory) {
     previousFrameTime = glfwGetTime();
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     previousScreenSize = glm::ivec2(width, height);
-    renderer2d.initialize(previousScreenSize);
+    renderer2d.initialize(previousScreenSize, executableDirectory);
 }
 
 Engine::~Engine() {
@@ -59,4 +60,8 @@ void Engine::renderFrame() {
     ////ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     glfwSwapBuffers(window);
+}
+
+std::string Engine::getExecutableDirectory() {
+    return executableDirectory;
 }

@@ -6,12 +6,11 @@
 #include "../glCommon.h"
 #include "../camera.h"
 
-extern std::string executableDirectory;
+FluidRenderer2D::FluidRenderer2D() {
+	
+}
 
-void FluidRenderer2D::initialize(const glm::ivec2 screenSize) {
-	const int floatsPerQuad = 6 * (3 + 2);
-	gridVertexBufferLength = static_cast<int>(gridSize.x * gridSize.y * floatsPerQuad);
-
+void FluidRenderer2D::initialize(const glm::ivec2 screenSize, std::string executableDirectory) {
 	glGenVertexArrays(1, &gridVAO);
 	glBindVertexArray(gridVAO);
 
@@ -20,7 +19,7 @@ void FluidRenderer2D::initialize(const glm::ivec2 screenSize) {
 
 	glGenBuffers(1, &gridVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
-	updateGridVertices(screenSize);
+	updateGridQuad(screenSize);
 	glVertexAttribPointer(vertexPositionLocation, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GL_FLOAT), 0);
 	glEnableVertexAttribArray(vertexPositionLocation);
 	glVertexAttribPointer(vertexUVLocation, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GL_FLOAT), (GLvoid*)(3 * sizeof(GL_FLOAT)));
@@ -36,46 +35,32 @@ void FluidRenderer2D::initialize(const glm::ivec2 screenSize) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	gridProgram = glCreateProgram();
+	gridFragmentShader.setExecutableDirectory(executableDirectory);
+	gridVertexShader.setExecutableDirectory(executableDirectory);
 	gridFragmentShader.compileAndAttach(gridProgram, GL_FRAGMENT_SHADER, "noop_fragment.glsl");
 	gridVertexShader.compileAndAttach(gridProgram, GL_VERTEX_SHADER, "noop_vertex.glsl");
 	glLinkProgram(gridProgram);
 
 	debugImageData.resize(gridSize.x * gridSize.y * 4);
+	gridTextureData.resize(gridSize.x * gridSize.y * 4);
 }
 
 void FluidRenderer2D::screenSizeUpdate(const glm::ivec2 newSize) {
-	updateGridVertices(newSize);
+	updateGridQuad(newSize);
 }
 
 void FluidRenderer2D::render(GLFWwindow* window, float aspectRatio, float elapsedSeconds) {
-	// Render grid rectangles
-	glActiveTexture(GL_TEXTURE0);
+	fluidSolver.runStep();
+	updateGridTexture();
+
 	glBindTexture(GL_TEXTURE_2D, gridTexture);
-
-	// Update for grid color data, slow but works for now
-	for (int x = 0; x < gridSize.x; x++) {
-		for (int y = 0; y < gridSize.y; y++) {
-			int i = y * gridSize.x + x;
-			if (i < debugTextureCounter) {
-				debugImageData.at(4 * i) = 0;
-				debugImageData.at(4 * i + 1) = 100;
-				debugImageData.at(4 * i + 2) = 100;
-			} else {
-				debugImageData.at(4 * i) = 0;
-				debugImageData.at(4 * i + 1) = 0;
-				debugImageData.at(4 * i + 2) = 0;
-			}
-		}
-	}
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gridSize.x, gridSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, debugImageData.data());
-
 	glBindVertexArray(gridVAO);
 	glUseProgram(gridProgram);
 
 	bool wireframe = false;
 
 	if (wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	glDrawArrays(GL_TRIANGLES, 0, gridVertexBufferLength);
+	glDrawArrays(GL_TRIANGLES, 0, gridVBOSize);
 	if (wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 	debugTextureCounter++;
@@ -84,47 +69,68 @@ void FluidRenderer2D::render(GLFWwindow* window, float aspectRatio, float elapse
 	}
 }
 
-void FluidRenderer2D::updateGridVertices(const glm::ivec2 screenSize) {
+void FluidRenderer2D::updateGridQuad(const glm::ivec2 screenSize) {
 	int totalGridWidth = screenSize.x - minimumMargins.x * 2;
 	float tilePixelSize = totalGridWidth / (float) gridSize.x;
 	if (tilePixelSize * gridSize.y > screenSize.y - minimumMargins.y * 2) {
 		tilePixelSize = (screenSize.y - minimumMargins.y * 2) / (float) gridSize.y;
 	}
-
-	// Size in [-1, 1] 2D screen space.
-	const glm::vec2 tileSize{
-		2 * tilePixelSize / (float) screenSize.x,
-		2 * tilePixelSize / (float) screenSize.y
-	};
-	const glm::vec2 centerOffset{
-		tileSize.x * (gridSize.x / 2 - 0.5f),
-		tileSize.y * (gridSize.y / 2 - 0.5f),
+	glm::vec2 quadPixelSize{
+		tilePixelSize * gridSize.x,
+		tilePixelSize * gridSize.y
 	};
 
-	const float squareVertices[] = {
-		tileSize.x / 2,  tileSize.y / 2, 0.0f,
-		-tileSize.x / 2,  tileSize.y / 2, 0.0f,
-		-tileSize.x / 2, -tileSize.y / 2, 0.0f,
-		tileSize.x / 2,  tileSize.y / 2, 0.0f,
-		-tileSize.x / 2, -tileSize.y / 2, 0.0f,
-		tileSize.x / 2, -tileSize.y / 2, 0.0f,
-	};
-	const int squareVerticesLength = sizeof(squareVertices) / sizeof(float);
+	glm::vec2 quadSize = 2.0f * quadPixelSize / glm::vec2(screenSize);
 
-	std::vector<float> gridVertices;
-	gridVertices.reserve(gridSize.x * gridSize.y * squareVerticesLength);
-	for (int x = 0; x < gridSize.x; x++) {
-		for (int y = 0; y < gridSize.y; y++) {
-			for (int i = 0; i < squareVerticesLength; i += 3) {
-				gridVertices.push_back(squareVertices[i] + x * tileSize.x - centerOffset.x);
-				gridVertices.push_back(squareVertices[i + 1] + y * tileSize.y - centerOffset.y);
-				gridVertices.push_back(squareVertices[i + 2]);
-				gridVertices.push_back(x / (float) gridSize.x);
-				gridVertices.push_back(y / (float) gridSize.y);
-			}
-		}
-	}
+	const float quadVertexData[] = {
+		quadSize.x / 2,  quadSize.y / 2, 0.0f, 1.0f, 1.0f,
+		-quadSize.x / 2,  quadSize.y / 2, 0.0f, 0.0f, 1.0f,
+		-quadSize.x / 2, -quadSize.y / 2, 0.0f, 0.0f, 0.0f,
+		quadSize.x / 2,  quadSize.y / 2, 0.0f, 1.0f, 1.0f,
+		-quadSize.x / 2, -quadSize.y / 2, 0.0f, 0.0f, 0.0f,
+		quadSize.x / 2, -quadSize.y / 2, 0.0f, 1.0f, 0.0f
+	};
+
+	gridVBOSize = 6;
 
 	glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
-	glBufferData(GL_ARRAY_BUFFER, gridVertexBufferLength * sizeof(float), gridVertices.data(), GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertexData), quadVertexData, GL_STATIC_DRAW);
+}
+
+void FluidRenderer2D::updateGridTexture() {
+	// Render grid rectangles
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, gridTexture);
+
+	switch (gridRenderMode) {
+	case GridRenderMode::CellType:
+		for (int x = 0; x < gridSize.x; x++) {
+			for (int y = 0; y < gridSize.y; y++) {
+				int i = (y * gridSize.x + x) * 4;
+
+				switch (fluidSolver.getCellType(x, y)) {
+				case FluidSim2dCPU::CELL_EMPTY:
+					gridTextureData[i + 3] = 0;
+					break;
+				case FluidSim2dCPU::CELL_SOLID:
+					gridTextureData[i + 0] = 130;
+					gridTextureData[i + 1] = 130;
+					gridTextureData[i + 2] = 130;
+					gridTextureData[i + 3] = 255;
+					break;
+				case FluidSim2dCPU::CELL_FLUID:
+					gridTextureData[i + 0] = 52;
+					gridTextureData[i + 1] = 161;
+					gridTextureData[i + 2] = 235;
+					gridTextureData[i + 3] = 255;
+					break;
+				}
+			}
+		}
+
+		break;
+	}
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gridSize.x, gridSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, gridTextureData.data());
+	glBindTexture(GL_TEXTURE_2D, 0);
 }

@@ -9,9 +9,7 @@
 #include "shader.h"
 
 
-extern std::string executableDirectory;
-
-Shader::Shader() : id(-1), program(-1) {}
+Shader::Shader() : id(-1), program(-1), executableDirectory("") {}
 
 void Shader::compileAndAttach(GLuint program, GLenum shaderType, const std::string& filename) {
     this->program = program;
@@ -53,6 +51,10 @@ void Shader::compileAndAttach(GLuint program, GLenum shaderType, const std::stri
     }
 
     glAttachShader(program, id);
+}
+
+void Shader::setExecutableDirectory(std::string executableDirectory) {
+    this->executableDirectory = executableDirectory;
 }
 
 void Shader::setUniformFloat(const std::string & name, float value) {

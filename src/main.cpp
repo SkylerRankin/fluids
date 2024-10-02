@@ -9,8 +9,6 @@
 #include "glCommon.h"
 #include "renderer/renderer2d.h"
 
-std::string executableDirectory;
-
 void errorCallback(int error, const char* message) {
     std::cout << "Error (" << error << "): " << message << std::endl;
 }
@@ -30,7 +28,7 @@ void mouseEnteredCallback(GLFWwindow* window, int entered) {
     engine->mouseEnteredCallback(entered);
 }
 
-void setExecutableDirectory() {
+std::string getExecutableDirectory() {
     WCHAR wideExecutableDirectory[MAX_PATH];
     GetModuleFileNameW(NULL, wideExecutableDirectory, MAX_PATH);
     unsigned int endIndex = MAX_PATH - 1;
@@ -38,10 +36,11 @@ void setExecutableDirectory() {
         wideExecutableDirectory[endIndex--] = 0;
     }
 
+    std::string executableDirectory;
     std::wstring wideString{ wideExecutableDirectory, endIndex };
     executableDirectory.resize(wideString.length());
     wcstombs_s(nullptr, executableDirectory.data(), wideString.length() + 1, wideString.data(), wideString.size());
-    std::cout << "Executable directory: " << executableDirectory << std::endl;
+    return executableDirectory;
 }
 
 int main() {
@@ -67,14 +66,17 @@ int main() {
     glfwSetCursorEnterCallback(window, &mouseEnteredCallback);
     //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwMakeContextCurrent(window);
+    // Removes vsync
+    //glfwSwapInterval(0);
     gladLoadGL();
 
     const GLubyte* version = glGetString(GL_VERSION);
     std::cout << "OpenGL version: " << version << std::endl;
 
-    setExecutableDirectory();
+    std::string executableDirectory = getExecutableDirectory();
+    std::cout << "Executable directory: " << executableDirectory << std::endl;
 
-    Engine engine{window};
+    Engine engine{window, executableDirectory };
     glfwSetWindowUserPointer(window, &engine);
 
     while (!glfwWindowShouldClose(window)) {

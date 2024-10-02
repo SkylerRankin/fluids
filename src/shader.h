@@ -10,11 +10,13 @@ public:
 	GLuint id;
 private:
 	GLuint program;
+	std::string executableDirectory;
 	std::map<std::string, GLint> attributeLocations;
 	
 public:
 	Shader();
 	void compileAndAttach(GLuint program, GLenum shaderType, const std::string& filename);
+	void setExecutableDirectory(std::string executableDirectory);
 	void setUniformFloat(const std::string& name, float value);
 	void setUniformFloatv(const std::string& name, int count, float *values);
 	void setUniformVec3(const std::string& name, glm::vec3 value);
